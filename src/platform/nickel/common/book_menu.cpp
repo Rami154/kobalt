@@ -20,6 +20,7 @@
 #include <QRegularExpression>
 #include <QVariantMap>
 #include <dlfcn.h>
+#include <QStringList>
 
 namespace kobalt {
 namespace {
@@ -114,7 +115,12 @@ ReaderBookRoute readerBookRoute(const void *volume, QString *identity, QString *
 #endif
     // Nickel stores sideloaded ContentIDs as file:// followed by the literal
     // path. URL parsing would truncate #/? and decode literal percent sequences.
-    const bool sideloaded = id.startsWith("file:///mnt/onboard/");
+    static const QStringList storageRoots{QStringLiteral("/mnt/onboard/"), QStringLiteral("/mnt/sd/")};
+    QString storageRoot;
+    for (const auto &root : storageRoots)
+        if (id.startsWith("file://" + root))
+            storageRoot = root;
+    const bool sideloaded = !storageRoot.isEmpty();
     auto filename = sideloaded ? id.mid(7) : QString();
     const bool purchased =
         QRegularExpression("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
@@ -123,8 +129,8 @@ ReaderBookRoute readerBookRoute(const void *volume, QString *identity, QString *
     if (purchased)
         filename = "/mnt/onboard/.kobo/kepub/" + id;
     if (QFileInfo(filename).canonicalFilePath() != filename || filename.isEmpty() ||
-        (!purchased && (!sideloaded || !filename.startsWith("/mnt/onboard/") ||
-                        filename.mid(13).split('/').filter(QRegularExpression("^\\.")).size() ||
+        (!purchased && (!sideloaded || !filename.startsWith(storageRoot) ||
+                        filename.mid(storageRoot.size()).split('/').filter(QRegularExpression("^\\.")).size() ||
                         !filename.endsWith(".epub", Qt::CaseInsensitive))))
         return Route::Unsupported;
     if (path)
